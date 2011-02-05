@@ -1,0 +1,8 @@
+English:
+--------
+This is a set of extension for Zend Framework to use OpenId brikers Loginza and RPXNow(Janrain).
+
+Русский:
+--------
+Это библиотека расширения для Zend Framework по поддержке использованиии OpenId брокеров Loginza и RPXNow (Janrain).
+Подробности на: http://tokarchuk.ru/2011/01/openid-zend-framework/
