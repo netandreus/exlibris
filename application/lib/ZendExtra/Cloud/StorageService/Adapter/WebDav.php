@@ -111,7 +111,7 @@ class ZendExtra_Cloud_StorageService_Adapter_WebDav
      */
     public function storeItem($destinationPath, $data, $options = array())
     {
-        // Пробуем определить mime-type
+        // ГЏГ°Г®ГЎГіГҐГ¬ Г®ГЇГ°ГҐГ¤ГҐГ«ГЁГІГј mime-type
         if(!array_key_exists('mimeType', $options)) {
             $tmp = explode("/", $destinationPath);
             $filename = $tmp[count($tmp)-1];
@@ -163,7 +163,7 @@ class ZendExtra_Cloud_StorageService_Adapter_WebDav
      * @param  string $sourcePath
      * @param  string $destination path
      * @param  array $options
-     * @params bool $native Использовать ли команду WebDav COPY
+     * @params bool $native Г€Г±ГЇГ®Г«ГјГ§Г®ГўГ ГІГј Г«ГЁ ГЄГ®Г¬Г Г­Г¤Гі WebDav COPY
      * @return void
      */
     public function copyItem($sourcePath, $destinationPath, $options = array())
@@ -224,6 +224,19 @@ class ZendExtra_Cloud_StorageService_Adapter_WebDav
         $oldName = $tmp[count($tmp)-1];
         $destinationPath = str_replace($oldName, $name, $path);
         $this->moveItem($path, $destinationPath, $options);
+    }
+
+    /*
+     * РЎРѕР·РґР°С‘С‚ РєР°С‚Р°Р»РѕРі РІ WebDav
+     * @param $path
+     */
+    public function createFolder($destinationPath) {
+        $lastCharacter = $destinationPath[strlen($destinationPath)-1];
+        if($lastCharacter != "/")
+            $destinationPath .= "/";
+        $path = $this->_getFullPath($destinationPath);
+        $client = $this->getClient()->setUri($path);
+        $client->request('MKCOL');
     }
 
     /**
@@ -342,7 +355,7 @@ class ZendExtra_Cloud_StorageService_Adapter_WebDav
     }
 
     /*
-     * Возвращает mime type по расшиернию файла
+     * Г‚Г®Г§ГўГ°Г Г№Г ГҐГІ mime type ГЇГ® Г°Г Г±ГёГЁГҐГ°Г­ГЁГѕ ГґГ Г©Г«Г 
      */
     public static function getMimeType($extension) {
         $mimeTypes = self::mimetypeMapping();
