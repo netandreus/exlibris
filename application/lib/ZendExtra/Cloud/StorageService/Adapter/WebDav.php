@@ -58,6 +58,12 @@ class ZendExtra_Cloud_StorageService_Adapter_WebDav
     protected $_defaultServerKey = NULL;
     protected $_options = array();
 
+    /**
+     * WebDav commands
+     * @var array
+     */
+    protected $_webDavCommands = array('GET', 'POST', 'PUT', 'DELETE', 'MKCOL', 'COPY', 'MOVE', 'PROPFIND', 'PROPPATCH', 'LOCK', 'UNLOCK', 'OPTIONS');
+
     /*
      * Constructor
      *
@@ -82,6 +88,30 @@ class ZendExtra_Cloud_StorageService_Adapter_WebDav
         $this->_options = $options;
     }
 
+    /**
+     * Execute WebDav command on server and returns
+     * responce object
+     * @param $path
+     * @param $command
+     * @param array $options
+     * @return Zend_Http_Response
+     */
+    public function command($path, $command, $options = array())
+    {
+        if(!in_array($command, $this->_webDavCommands))
+            throw new Zend_Cloud_Exception('Unknown webdav command', 500);
+        $path = $this->_getFullPath($path, array());
+        $client = $this->getClient()->setUri($path);
+        if($options['auth'] && count($options == 3) && $options['auth']['username'] && $options['auth']['password'] && $options['auth']['type'])
+            $client->setAuth($options['auth']['username'], $options['auth']['password'], $options['auth']['type']);
+        if($options['data'] && $options['mimeType'])
+            $client->setRawData($options['data'], $options['mimeType']);
+        if($options['headers'])
+            $client->setHeaders($options['headers']);
+        $responce = $client->request($command);
+        return $responce;
+    }
+
     /*
      * Get an item from the storage service.
      *
@@ -91,8 +121,18 @@ class ZendExtra_Cloud_StorageService_Adapter_WebDav
      */
     public function fetchItem($path, $options = array())
     {
-        $path = $this->_getFullPath($path, array());
-        $item = file_get_contents($path);
+        // Простой метод получения данных, не подходит для серверов,
+        // требующих аутентификацию
+        if($options['simple'] == true) {
+            $path = $this->_getFullPath($path, array());
+            $item = file_get_contents($path);
+            return $item;
+        }
+
+        // Подходит для всех серверов
+        $response = $this->command($path, 'GET');
+        $headers = $response->getHeaders();
+        $item = $response->getBody();
         return $item;
     }
 
@@ -111,7 +151,7 @@ class ZendExtra_Cloud_StorageService_Adapter_WebDav
      */
     public function storeItem($destinationPath, $data, $options = array())
     {
-        // Ïðîáóåì îïðåäåëèòü mime-type
+        // Пробуем определить mime-type
         if(!array_key_exists('mimeType', $options)) {
             $tmp = explode("/", $destinationPath);
             $filename = $tmp[count($tmp)-1];
@@ -126,10 +166,13 @@ class ZendExtra_Cloud_StorageService_Adapter_WebDav
             $tmp = explode("/", $destinationPath);
             $options['filename'] = $tmp[count($tmp)-1];
         }
+        $this->command($destinationPath, 'PUT', array('data' => $data, 'mimeType' => $options['mimeType']));
+        /*
         $path = $this->_getFullPath($destinationPath);
         $client = $this->getClient()->setUri($path);
         $client->setRawData($data, $options['mimeType']);
         $client->request('PUT');
+        */
     }
 
     /**
@@ -143,10 +186,13 @@ class ZendExtra_Cloud_StorageService_Adapter_WebDav
     {
         if(empty($path))
             return false;
-        $path = $this->_getFullPath($path);
         try {
+            $this->command($path, 'DELETE');
+            /*
+            $path = $this->_getFullPath($path);
             $client = $this->getClient()->resetParameters()->setUri($path);
             $client->request('DELETE');
+            */
         } catch (Exception  $e) {
             throw new Zend_Cloud_StorageService_Exception('Error on delete: '.$e->getMessage(), $e->getCode(), $e);
         }
@@ -163,7 +209,7 @@ class ZendExtra_Cloud_StorageService_Adapter_WebDav
      * @param  string $sourcePath
      * @param  string $destination path
      * @param  array $options
-     * @params bool $native Èñïîëüçîâàòü ëè êîìàíäó WebDav COPY
+     * @params bool $native Использовать ли команду WebDav COPY
      * @return void
      */
     public function copyItem($sourcePath, $destinationPath, $options = array())
@@ -173,8 +219,11 @@ class ZendExtra_Cloud_StorageService_Adapter_WebDav
         $path = $this->_getFullPath($sourcePath);
 
         if($options['native']) {
+            $this->command($sourcePath, 'COPY', array('headers' => array('Destination'=>$destinationPath)));
+            /*
             $client = $this->getClient()->setUri($path)->setHeaders(array('Destination'=>$destinationPath));
             $client->request('COPY');
+            */
         } else {
             $data = $this->fetchItem($sourcePath);
             $this->storeItem($destinationPath, $data);
@@ -195,11 +244,14 @@ class ZendExtra_Cloud_StorageService_Adapter_WebDav
     {
         if(!array_key_exists('native', $options))
             $options['native'] = true;
-        $path = $this->_getFullPath($sourcePath);
 
         if($options['native']) {
+            $this->command($sourcePath, 'MOVE', array('headers' => array('Destination'=>$destinationPath)));
+            /*
+            $path = $this->_getFullPath($sourcePath);
             $client = $this->getClient()->setUri($path)->setHeaders(array('Destination'=>$destinationPath));
             $client->request('MOVE');
+            */
         } else {
             $data = $this->fetchItem($sourcePath);
             $this->storeItem($destinationPath, $data);
@@ -251,6 +303,16 @@ class ZendExtra_Cloud_StorageService_Adapter_WebDav
      */
     public function listItems($path, $options = null)
     {
+        if($options['mode'] == "get") {
+            $content = $this->_listByGet($path, $options);
+        } else {
+            $content = $this->_listByPropfind($path, $options);
+        }
+        return $content;
+    }
+
+    protected function _listByGet($path, $options = null)
+    {
         try {
             $path = $this->_getFullPath($path);
             $html = file_get_contents($path);
@@ -269,6 +331,40 @@ class ZendExtra_Cloud_StorageService_Adapter_WebDav
     }
 
     /**
+     * Listing directory using PROPFIND command.
+     * @param $path
+     * @param array $options
+     * @return array
+     * @throws Zend_Cloud_Exception
+     */
+    protected function _listByPropfind($path, $options = array())
+    {
+        $xml = '<?xml version="1.0" encoding="utf-8" ?><D:propfind xmlns:D="DAV:"><D:allprop/></D:propfind>';
+        $response = $this->command($path, 'PROPFIND', array(
+            'data' => $xml,
+            'mimeType' => 'text/xml',
+            'headers' => array(
+                'Content-Type' => 'text/xml; charset="utf-8"',
+                'Depth' => 1,
+                'Content-Length' => strlen($xml)
+            )
+        ));
+
+        if(empty($response))
+            throw new Zend_Cloud_Exception('Empty response on propfind command', 500);
+        $xml = $response->getBody();
+        $dom = new Zend_Dom_Query($xml);
+        $result = $dom->query('d:multistatus d:response d:href');
+        $content = array();
+        foreach($result as $element) {
+            $text = $element->firstChild->wholeText; // $element->getAttribute('href')
+            if($text != "../" && $text != $path && $text != $path.'/')
+                $content[] = str_replace("/", "", $text);
+        }
+        return $content;
+    }
+
+    /**
      * Get a key/value array of metadata for the given path.
      *
      * @param  string $path
@@ -277,7 +373,8 @@ class ZendExtra_Cloud_StorageService_Adapter_WebDav
      */
     public function fetchMetadata($path, $options = array())
     {
-        throw new Zend_Cloud_StorageService_Exception('Method does not implemented.');
+        require_once 'Zend/Cloud/OperationNotAvailableException.php';
+        throw new Zend_Cloud_OperationNotAvailableException('Fetching metadata not implemented');
     }
 
     /*
@@ -291,7 +388,8 @@ class ZendExtra_Cloud_StorageService_Adapter_WebDav
      */
     public function storeMetadata($destinationPath, $metadata, $options = array())
     {
-        throw new Zend_Cloud_StorageService_Exception('Method does not implemented.');
+        require_once 'Zend/Cloud/OperationNotAvailableException.php';
+        throw new Zend_Cloud_OperationNotAvailableException('Storing metadata not implemented');
     }
 
     /*
@@ -303,7 +401,8 @@ class ZendExtra_Cloud_StorageService_Adapter_WebDav
      */
     public function deleteMetadata($path)
     {
-        throw new Zend_Cloud_StorageService_Exception('Method does not implemented.');
+        require_once 'Zend/Cloud/OperationNotAvailableException.php';
+        throw new Zend_Cloud_OperationNotAvailableException('Deleting metadata not implemented');
     }
 
     /**
@@ -316,7 +415,8 @@ class ZendExtra_Cloud_StorageService_Adapter_WebDav
     protected function _getFullPath($path, $options = array())
     {
         $server = $this->_getServer();
-        $path = (!array_key_exists('port', $server) OR $server['port'] == 80)? 'http://'.$server['host'].$path : 'http://'.$server['host'].':'.$server['port'].$path;
+        $protocol = ($server['protocol'])? $server['protocol'] : 'http';
+        $path = (!array_key_exists('port', $server) OR $server['port'] == 80)? $protocol.'://'.$server['host'].$path : $protocol.'://'.$server['host'].':'.$server['port'].$path;
         return $path;
     }
 
@@ -331,9 +431,10 @@ class ZendExtra_Cloud_StorageService_Adapter_WebDav
             throw new Zend_Cloud_StorageService_Exception('No WebDav servers registered.');
         if(!empty($key) AND array_key_exists($key, $this->_servers))
             return $this->_servers[$key];
-        if(!empty($this->_defaultServerKey))
+        if(!empty($this->_defaultServerKey)) {
             return $this->_servers[$this->_defaultServerKey];
-        return $this->_servers[0];
+        }
+        return array_pop($this->_servers);
     }
 
     /*
@@ -355,7 +456,7 @@ class ZendExtra_Cloud_StorageService_Adapter_WebDav
     }
 
     /*
-     * Âîçâðàùàåò mime type ïî ðàñøèåðíèþ ôàéëà
+     * Возвращает mime type по расшиернию файла
      */
     public static function getMimeType($extension) {
         $mimeTypes = self::mimetypeMapping();
@@ -1187,3 +1288,4 @@ class ZendExtra_Cloud_StorageService_Adapter_WebDav
         );
     }
 }
+
