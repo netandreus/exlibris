@@ -40,7 +40,7 @@ require_once 'Zend/Cloud/StorageService/Exception.php';
  * // Directory listing (if in nginx allow)
  * var_dump($storage->listItems('/upload/'));
  *
- * Yandex.disk exapmle:
+ * Yandex.disk example:
  * ====================
  * $storage = Zend_Cloud_StorageService_Factory::getAdapter(array(
  *    Zend_Cloud_StorageService_Factory::STORAGE_ADAPTER_KEY => 'ZendExtra_Cloud_StorageService_Adapter_WebDav',
