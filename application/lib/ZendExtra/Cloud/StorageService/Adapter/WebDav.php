@@ -11,6 +11,7 @@ require_once 'Zend/Cloud/StorageService/Exception.php';
  * @copyright  Copyright (c) 2012 Tokarchuk Andrey. (http://tokarchuk.ru)
  *
  * Examples:
+ * =========
  * // Init storage
  * / ** @var ZendExtra_Cloud_StorageService_Adapter_WebDav $storage ** /
  * $storage = Zend_Cloud_StorageService_Factory::getAdapter(array(
@@ -38,6 +39,17 @@ require_once 'Zend/Cloud/StorageService/Exception.php';
  * $storage->renameItem('/upload/upload_test2.txt', 'upload_test.txt', array('native' => false));
  * // Directory listing (if in nginx allow)
  * var_dump($storage->listItems('/upload/'));
+ *
+ * Yandex.disk exapmle:
+ * ====================
+ * $storage = Zend_Cloud_StorageService_Factory::getAdapter(array(
+ *    Zend_Cloud_StorageService_Factory::STORAGE_ADAPTER_KEY => 'ZendExtra_Cloud_StorageService_Adapter_WebDav',
+ *   ZendExtra_Cloud_StorageService_Adapter_WebDav::SERVERS_KEY   => array(
+ *       'static1.site.ru' => array('host' => 'webdav.yandex.ru', 'port' => '80', 'protocol' => 'https')
+ *   ),
+ *    ZendExtra_Cloud_StorageService_Adapter_WebDav::DEFAULT_SERVER_KEY => 'static1.site.ru'
+ * ));
+ * $files = $storage->listItems('/upload');
  */
 class ZendExtra_Cloud_StorageService_Adapter_WebDav
     implements Zend_Cloud_StorageService_Adapter
@@ -121,15 +133,15 @@ class ZendExtra_Cloud_StorageService_Adapter_WebDav
      */
     public function fetchItem($path, $options = array())
     {
-        // Простой метод получения данных, не подходит для серверов,
-        // требующих аутентификацию
+        // ??????? ????? ????????? ??????, ?? ???????? ??? ????????,
+        // ????????? ??????????????
         if($options['simple'] == true) {
             $path = $this->_getFullPath($path, array());
             $item = file_get_contents($path);
             return $item;
         }
 
-        // Подходит для всех серверов
+        // ???????? ??? ???? ????????
         $response = $this->command($path, 'GET');
         $headers = $response->getHeaders();
         $item = $response->getBody();
@@ -151,7 +163,7 @@ class ZendExtra_Cloud_StorageService_Adapter_WebDav
      */
     public function storeItem($destinationPath, $data, $options = array())
     {
-        // Пробуем определить mime-type
+        // ??????? ?????????? mime-type
         if(!array_key_exists('mimeType', $options)) {
             $tmp = explode("/", $destinationPath);
             $filename = $tmp[count($tmp)-1];
@@ -209,7 +221,7 @@ class ZendExtra_Cloud_StorageService_Adapter_WebDav
      * @param  string $sourcePath
      * @param  string $destination path
      * @param  array $options
-     * @params bool $native Использовать ли команду WebDav COPY
+     * @params bool $native ???????????? ?? ??????? WebDav COPY
      * @return void
      */
     public function copyItem($sourcePath, $destinationPath, $options = array())
@@ -279,7 +291,7 @@ class ZendExtra_Cloud_StorageService_Adapter_WebDav
     }
 
     /*
-     * Создаёт каталог в WebDav
+     * ??????? ??????? ? WebDav
      * @param $path
      */
     public function createFolder($destinationPath) {
@@ -448,15 +460,15 @@ class ZendExtra_Cloud_StorageService_Adapter_WebDav
         if(empty($this->_client)) {
             $this->_client = new Zend_Http_Client();
             $this->_client->setConfig(array(
-                'maxredirects' => 0,
-                'timeout'      => 30)
+                    'maxredirects' => 0,
+                    'timeout'      => 30)
             );
         }
         return $this->_client;
     }
 
     /*
-     * Возвращает mime type по расшиернию файла
+     * ?????????? mime type ?? ?????????? ?????
      */
     public static function getMimeType($extension) {
         $mimeTypes = self::mimetypeMapping();
@@ -1288,4 +1300,3 @@ class ZendExtra_Cloud_StorageService_Adapter_WebDav
         );
     }
 }
-
